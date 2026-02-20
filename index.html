@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>資格クイズ V3</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="container">
+ 
+    <section id="card" class="card">
+      <div id="question" class="question"></div>
+      <div id="options" class="options"></div>
+      <div id="feedback" class="feedback"></div>
+      <div class="card-footer">
+        <button id="pass" class="next pass">パス</button>
+        <button id="pause" class="next secondary">一時停止</button>
+        <button id="quit" class="next secondary">終了</button>
+        <button id="next" class="next" disabled>次の問題</button>
+      </div>
+    </section>
+    <section class="mode-deck">
+      <h2 class="mode-title">モード</h2>
+      <div class="mode-bar">
+        <label><input type="checkbox" id="fast-mode"> 最速モード</label>
+        <label><input type="checkbox" id="explain-mode"> 解説モード</label>
+        <label><input type="checkbox" id="wrong-only-mode"> 誤答優先</label>
+        <label><input type="checkbox" id="avoid-correct-mode"> 正解はなるべく出さない</label>
+        <label><input type="checkbox" id="random-mode"> ランダム</label>
+      </div>
+    </section>
+    <section class="stats-deck">
+      <h2 class="stats-title">STATS</h2>
+      <div class="stats-grid">
+        <div class="stat-item">
+          <span class="stat-label">全問題数</span>
+          <span id="stat-total-questions" class="stat-value">0</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">回答数</span>
+          <span id="stat-total-answers" class="stat-value">0</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">正答数</span>
+          <span id="stat-correct" class="stat-value">0</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">正答率</span>
+          <span id="stat-accuracy" class="stat-value">0.0%</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">合格率</span>
+          <span id="stat-passrate" class="stat-value">0.0%</span>
+        </div>
+      </div>
+    </section>
+    <div id="overlay" class="overlay">
+      <div class="overlay-content">
+        <p id="overlay-text">解説ダミー（ここにMLの解説を表示）</p>
+        <button id="overlay-close" class="overlay-close">閉じる</button>
+      </div>
+    </div>
+  </main>
+  <script src="main.js"></script>
+</body>
+</html>
