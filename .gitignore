@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Local config / credentials helpers
+.key/
+dev/
+.firebase/
+

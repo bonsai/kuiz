@@ -26,8 +26,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-BASE_DIR = Path(__file__).resolve().parent
-QUESTIONS_PATH = BASE_DIR / "questions.json"
+BASE_DIR = Path(__file__).resolve().parent.parent
+DATA_DIR = BASE_DIR / "data"
 
 
 class Question(BaseModel):
@@ -119,24 +119,49 @@ def get_db():
 
 
 def _load_questions_from_file() -> List[Question]:
-    if not QUESTIONS_PATH.exists():
-        return []
-    data = json.loads(QUESTIONS_PATH.read_text(encoding="utf-8"))
     result: List[Question] = []
-    for item in data:
+    if not DATA_DIR.exists():
+        return result
+
+    for json_file in DATA_DIR.glob("*.json"):
+        if json_file.name == "firestore-schema.json":
+            continue
+
         try:
-            result.append(
-                Question(
-                    id=str(item.get("id")),
-                    category=item.get("category") or "",
-                    question=item.get("question") or "",
-                    options=item.get("options") or [],
-                    answer=max(0, int(item.get("answer", 0)) - 1),
-                    explanation=item.get("explanation"),
-                )
-            )
+            data = json.loads(json_file.read_text(encoding="utf-8"))
+            if not isinstance(data, list):
+                continue
+            for i, item in enumerate(data):
+                try:
+                    options = item.get("options") or item.get("choices") or []
+                    raw_answer = item.get("answer")
+
+                    if isinstance(raw_answer, str):
+                        try:
+                            answer_idx = options.index(raw_answer)
+                        except ValueError:
+                            answer_idx = 0
+                    else:
+                        answer_idx = max(0, int(raw_answer or 0) - 1)
+
+                    item_id = str(item.get("id") or f"{json_file.stem}_{i+1}")
+                    category = item.get("category") or ("ITパスポート" if "passpo" in json_file.name else "基本情報")
+
+                    result.append(
+                        Question(
+                            id=item_id,
+                            category=category,
+                            question=item.get("question") or "",
+                            options=options,
+                            answer=answer_idx,
+                            explanation=item.get("explanation"),
+                        )
+                    )
+                except Exception as e:
+                    logger.warning("load_questions_from_file: skip invalid item in %s: %s", json_file.name, e)
         except Exception as e:
-            logger.warning("load_questions_from_file: skip invalid item %s", e)
+            logger.warning("load_questions_from_file: could not read %s: %s", json_file.name, e)
+
     return result
 
 

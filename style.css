@@ -77,6 +77,11 @@ h1 {
   background: #1f2937;
 }
 
+.options button.prev-wrong {
+  background: rgba(255, 255, 0, 0.15); /* 薄い黄色 */
+  border-color: rgba(255, 255, 0, 0.3);
+}
+
 .feedback {
   min-height: 1.5em;
   margin-top: 8px;

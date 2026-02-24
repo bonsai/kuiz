@@ -3,6 +3,10 @@
     "public": ".",
     "ignore": [
       "firebase.json",
+      ".gitignore",
+      ".venv/**",
+      "__pycache__/**",
+      "dev/**",
       "**/.*",
       "**/node_modules/**"
     ]
