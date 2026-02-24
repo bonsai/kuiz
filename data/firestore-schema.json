@@ -1,0 +1,226 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Firestore Schema Definition",
+  "description": "Kuiz アプリケーションの Firestore データベーススキーマ定義",
+  "version": "1.0.0",
+  "collections": {
+    "questions": {
+      "description": "クイズ問題のマスタデータ",
+      "documentId": "問題 ID (文字列)",
+      "schema": {
+        "type": "object",
+        "required": ["id", "category", "question", "options", "answer"],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "問題の一意識別子"
+          },
+          "category": {
+            "type": "string",
+            "description": "問題のジャンル/カテゴリ名",
+            "examples": ["コンピュータ構成", "データ構造", "ネットワーク", "アルゴリズム", "データベース", "セキュリティ", "OS", "ソフトウェア開発"]
+          },
+          "question": {
+            "type": "string",
+            "description": "問題文"
+          },
+          "options": {
+            "type": "array",
+            "description": "選択肢の配列（4 択）",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 4,
+            "maxItems": 4
+          },
+          "answer": {
+            "type": "integer",
+            "description": "正解のインデックス（0-origin）",
+            "minimum": 0,
+            "maximum": 3
+          },
+          "explanation": {
+            "type": "string",
+            "description": "解説文（オプショナル）"
+          }
+        }
+      },
+      "indexes": [
+        {"field": "category", "order": "ASCENDING"}
+      ]
+    },
+    "user_question_state": {
+      "description": "ユーザーごとの問題学習状態（FSRS 間隔反復アルゴリズム）",
+      "documentId": "{userId}_{questionId}",
+      "schema": {
+        "type": "object",
+        "required": ["userId", "questionId", "repetitions", "interval", "ease", "nextReviewAt", "updatedAt"],
+        "properties": {
+          "userId": {
+            "type": "string",
+            "description": "ユーザー ID"
+          },
+          "questionId": {
+            "type": "string",
+            "description": "問題 ID"
+          },
+          "repetitions": {
+            "type": "integer",
+            "description": "連続正解回数",
+            "minimum": 0
+          },
+          "interval": {
+            "type": "integer",
+            "description": "次回復習までの間隔（日）",
+            "minimum": 1
+          },
+          "ease": {
+            "type": "number",
+            "description": "易しさ係数（SM-2 アルゴリズム）",
+            "minimum": 1.3,
+            "default": 2.5
+          },
+          "nextReviewAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "次回復習日時（UTC）"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "最終更新日時（UTC）"
+          }
+        }
+      },
+      "indexes": [
+        {"field": "userId", "order": "ASCENDING"},
+        {"field": "nextReviewAt", "order": "ASCENDING"}
+      ]
+    },
+    "answers": {
+      "description": "ユーザーの回答履歴",
+      "documentId": "自動生成（UUID）",
+      "schema": {
+        "type": "object",
+        "required": ["userId", "questionId", "choice", "correct", "elapsedMs", "createdAt"],
+        "properties": {
+          "userId": {
+            "type": "string",
+            "description": "ユーザー ID"
+          },
+          "questionId": {
+            "type": "string",
+            "description": "問題 ID"
+          },
+          "choice": {
+            "type": "integer",
+            "description": "ユーザーが選択した答えのインデックス（0-origin）",
+            "minimum": 0,
+            "maximum": 3
+          },
+          "correct": {
+            "type": "boolean",
+            "description": "正解かどうか"
+          },
+          "elapsedMs": {
+            "type": "integer",
+            "description": "回答にかかった時間（ミリ秒）",
+            "minimum": 0
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "回答日時（UTC）"
+          }
+        }
+      },
+      "indexes": [
+        {"field": "userId", "order": "ASCENDING"},
+        {"field": "createdAt", "order": "DESCENDING"},
+        {"fields": [{"field": "userId", "order": "ASCENDING"}, {"field": "createdAt", "order": "DESCENDING"}]}
+      ]
+    },
+    "user_stats": {
+      "description": "ユーザーごとの学習統計情報",
+      "documentId": "{userId}",
+      "schema": {
+        "type": "object",
+        "required": ["userId", "totalAnswers", "correctCount", "totalElapsedMs", "accuracy", "lastAnsweredAt"],
+        "properties": {
+          "userId": {
+            "type": "string",
+            "description": "ユーザー ID"
+          },
+          "totalAnswers": {
+            "type": "integer",
+            "description": "総回答数",
+            "minimum": 0
+          },
+          "correctCount": {
+            "type": "integer",
+            "description": "正解数",
+            "minimum": 0
+          },
+          "totalElapsedMs": {
+            "type": "integer",
+            "description": "総回答時間（ミリ秒）",
+            "minimum": 0
+          },
+          "accuracy": {
+            "type": "number",
+            "description": "正答率（0.0 〜 1.0）",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "lastAnsweredAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "最終回答日時（UTC）"
+          }
+        }
+      },
+      "indexes": []
+    }
+  },
+  "securityRules": {
+    "description": "Firestore セキュリティルールの推奨設定",
+    "rules": {
+      "questions": {
+        "read": true,
+        "write": "request.auth != null && request.auth.token.admin == true"
+      },
+      "user_question_state": {
+        "read": "request.auth != null && request.auth.uid == resource.data.userId",
+        "write": "request.auth != null && request.auth.uid == request.resource.data.userId"
+      },
+      "answers": {
+        "read": "request.auth != null && request.auth.uid == resource.data.userId",
+        "write": "request.auth != null && request.auth.uid == request.resource.data.userId"
+      },
+      "user_stats": {
+        "read": "request.auth != null && request.auth.uid == resource.data.userId",
+        "write": "request.auth != null && request.auth.uid == request.resource.data.userId"
+      }
+    }
+  },
+  "fsrsAlgorithm": {
+    "description": "FSRS (Free Spaced Repetition Scheduler) アルゴリズムパラメータ",
+    "parameters": {
+      "initialEase": 2.5,
+      "minimumEase": 1.3,
+      "easeAdjustmentFormula": "ease + (0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02))",
+      "qualityMapping": {
+        "elapsedMs <= 5000": 5,
+        "5000 < elapsedMs <= 12000": 4,
+        "elapsedMs > 12000": 3,
+        "incorrect": 1
+      },
+      "intervalRules": {
+        "repetitions == 0 (after correct)": 1,
+        "repetitions == 1 (after correct)": 6,
+        "repetitions >= 2 (after correct)": "interval * ease",
+        "incorrect": "reset to 1"
+      }
+    }
+  }
+}

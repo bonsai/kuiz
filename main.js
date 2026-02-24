@@ -13,6 +13,8 @@ const statTotalAnswersEl = document.getElementById("stat-total-answers");
 const statCorrectEl = document.getElementById("stat-correct");
 const statAccuracyEl = document.getElementById("stat-accuracy");
 const statPassRateEl = document.getElementById("stat-passrate");
+const statPassRatePasspoEl = document.getElementById("stat-passrate-passpo");
+const statPassRateKihonEl = document.getElementById("stat-passrate-kihon");
 
 const fastModeEl = document.getElementById("fast-mode");
 const explainModeEl = document.getElementById("explain-mode");
@@ -40,10 +42,67 @@ let sessionQuestions = [];
 let sessionIndex = 0;
 const pendingResults = [];
 
+// LocalStorage key
+const STORAGE_KEY = "quiz_user_state";
+
+function getUserState() {
+  const saved = localStorage.getItem(STORAGE_KEY);
+  return saved ? JSON.parse(saved) : { questions: {}, totalAnswers: 0, correctCount: 0 };
+}
+
+function saveUserState(state) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+}
+
 function updateStatsDisplay() {
+  const state = getUserState();
+  // セッションの統計ではなく、累計の統計を表示するように変更（オプション）
+  // ここでは表示用に現在のセッション変数を更新
+  totalAnswers = state.totalAnswers;
+  correctCount = state.correctCount;
+
   const accuracy = totalAnswers === 0 ? 0 : (correctCount / totalAnswers) * 100;
   const passRate =
     totalQuestions === 0 ? 0 : (correctCount / totalQuestions) * 100;
+
+  // 試験区分別の統計
+  let passpoTotal = 0;
+  let passpoCorrect = 0;
+  let kihonTotal = 0;
+  let kihonCorrect = 0;
+
+  // すべての読み込まれた問題に対してループ
+  // sessionQuestions ではなく、読み込み時に保持している全データが必要だが、
+  // 現状は sessionQuestions が全データ（またはフィルタ済みデータ）を保持している
+  // 正確には全問題のカテゴリ情報が必要
+  
+  // 履歴データから試験区分別の正答数を集計
+  // （全問題リスト sessionQuestions の各問題の id と category を参照）
+  const categoryMap = {}; // id -> category
+  sessionQuestions.forEach(q => {
+    categoryMap[q.id] = q.category;
+  });
+
+  // 試験区分ごとの総問題数をカウント
+  let passpoMax = 0;
+  let kihonMax = 0;
+  sessionQuestions.forEach(q => {
+    if (q.category === "ITパスポート") passpoMax++;
+    else kihonMax++;
+  });
+
+  Object.keys(state.questions).forEach(qid => {
+    const s = state.questions[qid];
+    const cat = categoryMap[qid];
+    if (cat === "ITパスポート") {
+      if (s.correct > 0) passpoCorrect++;
+    } else if (cat === "基本情報") {
+      if (s.correct > 0) kihonCorrect++;
+    }
+  });
+
+  const passpoRate = passpoMax === 0 ? 0 : (passpoCorrect / passpoMax) * 100;
+  const kihonRate = kihonMax === 0 ? 0 : (kihonCorrect / kihonMax) * 100;
 
   if (statTotalQuestionsEl) {
     statTotalQuestionsEl.textContent = String(totalQuestions);
@@ -60,6 +119,12 @@ function updateStatsDisplay() {
   if (statPassRateEl) {
     statPassRateEl.textContent = `${passRate.toFixed(1)}%`;
   }
+  if (statPassRatePasspoEl) {
+    statPassRatePasspoEl.textContent = `${passpoRate.toFixed(1)}%`;
+  }
+  if (statPassRateKihonEl) {
+    statPassRateKihonEl.textContent = `${kihonRate.toFixed(1)}%`;
+  }
 }
 
 async function startSession() {
@@ -68,35 +133,132 @@ async function startSession() {
   feedbackEl.textContent = "";
   feedbackEl.className = "feedback";
 
+  let useStaticFallback = false;
+
   try {
     const resMeta = await fetch(`${API_BASE}/api/v1/meta`);
     if (resMeta.ok) {
       const meta = await resMeta.json();
       totalQuestions = meta.totalQuestions || 0;
+    } else {
+      useStaticFallback = true;
     }
-  } catch (_) {}
+  } catch (_) {
+    useStaticFallback = true;
+  }
 
-  try {
-    const params = new URLSearchParams({
-      userId,
-      limit: "30",
-      wrongOnly: wrongOnlyEl.checked ? "1" : "0",
-      avoidCorrect: avoidCorrectEl.checked ? "1" : "0",
-      randomMode: randomModeEl.checked ? "1" : "0"
-    });
-    const resBatch = await fetch(
-      `${API_BASE}/api/v1/questions/batch?${params.toString()}`
-    );
-    if (!resBatch.ok) {
+  if (useStaticFallback) {
+    console.log("Using static fallback mode...");
+    try {
+      const [resKihon, resPasspo] = await Promise.all([
+        fetch("./data/kihon.json"),
+        fetch("./data/passpo.json")
+      ]);
+      
+      const kihonData = resKihon.ok ? await resKihon.json() : [];
+      const passpoData = resPasspo.ok ? await resPasspo.json() : [];
+      
+      const allQuestions = [];
+      
+      // 基本情報の正規化
+      kihonData.forEach((item, i) => {
+        const options = item.options || item.choices || [];
+        const rawAnswer = item.answer;
+        let ansIdx = 0;
+        
+        if (typeof rawAnswer === "string") {
+          ansIdx = options.indexOf(rawAnswer);
+          if (ansIdx === -1) ansIdx = 0;
+        } else {
+          ansIdx = (parseInt(rawAnswer) || 1) - 1;
+        }
+
+        allQuestions.push({
+          id: item.id || `kihon_${i}`,
+          category: item.category || "基本情報",
+          question: item.question,
+          options: options,
+          answer: ansIdx,
+          explanation: item.explanation
+        });
+      });
+      
+      // ITパスポートの正規化
+      passpoData.forEach((item, i) => {
+        const options = item.options || item.choices || [];
+        const rawAnswer = item.answer;
+        let ansIdx = 0;
+        
+        if (typeof rawAnswer === "string") {
+          ansIdx = options.indexOf(rawAnswer);
+          if (ansIdx === -1) ansIdx = 0;
+        } else {
+          ansIdx = (parseInt(rawAnswer) || 1) - 1;
+        }
+        
+        allQuestions.push({
+          id: item.id || `passpo_${i}`,
+          category: item.category || "ITパスポート",
+          question: item.question,
+          options: options,
+          answer: ansIdx,
+          explanation: item.explanation
+        });
+      });
+      
+      if (useStaticFallback) {
+        const state = getUserState();
+        // 正解した問題をフィルタリング（一度も正解していない、または誤答がある問題を優先）
+        sessionQuestions = allQuestions.filter(q => {
+          const s = state.questions[q.id];
+          return !s || s.correct === 0; // 正解数が0回のみ（一度でも正解したら出さない）
+        });
+
+        // 苦手度（誤答数）に基づいてソート
+        sessionQuestions.sort((a, b) => {
+          const sA = state.questions[a.id] || { wrong: 0, correct: 0 };
+          const sB = state.questions[b.id] || { wrong: 0, correct: 0 };
+          
+          if (sA.wrong !== sB.wrong) return sB.wrong - sA.wrong;
+          return Math.random() - 0.5;
+        });
+      } else {
+        sessionQuestions = allQuestions;
+        if (randomModeEl.checked) {
+          shuffle(sessionQuestions);
+        }
+      }
+      
+      totalQuestions = sessionQuestions.length;
+      sessionIndex = 0;
+    } catch (e) {
+      console.error("Static fallback failed:", e);
+      questionEl.textContent = "データの読み込みに失敗しました";
+      return;
+    }
+  } else {
+    try {
+      const params = new URLSearchParams({
+        userId,
+        limit: "100",
+        wrongOnly: wrongOnlyEl.checked ? "1" : "0",
+        avoidCorrect: avoidCorrectEl.checked ? "1" : "0",
+        randomMode: randomModeEl.checked ? "1" : "0"
+      });
+      const resBatch = await fetch(
+        `${API_BASE}/api/v1/questions/batch?${params.toString()}`
+      );
+      if (!resBatch.ok) {
+        questionEl.textContent = "問題セットの取得に失敗しました";
+        return;
+      }
+      const data = await resBatch.json();
+      sessionQuestions = data.questions || [];
+      sessionIndex = 0;
+    } catch (_) {
       questionEl.textContent = "問題セットの取得に失敗しました";
       return;
     }
-    const data = await resBatch.json();
-    sessionQuestions = data.questions || [];
-    sessionIndex = 0;
-  } catch (_) {
-    questionEl.textContent = "問題セットの取得に失敗しました";
-    return;
   }
 
   updateStatsDisplay();
@@ -128,11 +290,22 @@ function renderQuestion(q) {
 
   questionEl.textContent = q.question;
   questionStartAt = performance.now();
+  
+  const state = getUserState();
+  const qState = state.questions[q.id];
+  const prevWrongChoices = qState ? (qState.wrongChoices || []) : [];
+
   const indices = shuffle(q.options.map((_, i) => i));
   currentOrder = indices;
   indices.forEach((idx, displayIndex) => {
     const btn = document.createElement("button");
     btn.textContent = `${displayIndex + 1}. ${q.options[idx]}`;
+    
+    // 以前に間違えた選択肢であればクラスを追加
+    if (prevWrongChoices.includes(idx)) {
+      btn.classList.add("prev-wrong");
+    }
+
     btn.addEventListener("click", () => selectOption(displayIndex, btn));
     optionsEl.appendChild(btn);
   });
@@ -196,8 +369,30 @@ async function submitAnswer() {
   const chosenOriginalIndex = currentOrder[selectedIndex];
   const isCorrect = correctIndex === chosenOriginalIndex;
 
-  totalAnswers += 1;
-  if (isCorrect) correctCount += 1;
+  // LocalStorage に結果を保存
+  const state = getUserState();
+  state.totalAnswers += 1;
+  if (isCorrect) state.correctCount += 1;
+  
+  const qId = currentQuestion.id;
+  if (!state.questions[qId]) {
+    state.questions[qId] = { correct: 0, wrong: 0, lastAt: null, wrongChoices: [] };
+  }
+  if (isCorrect) {
+    state.questions[qId].correct += 1;
+    // 正解したらその問題の誤答履歴（ハイライト用）をリセットする場合
+    // state.questions[qId].wrongChoices = []; 
+  } else {
+    state.questions[qId].wrong += 1;
+    // どの選択肢を間違えたか記録（重複なし）
+    if (!state.questions[qId].wrongChoices) state.questions[qId].wrongChoices = [];
+    if (!state.questions[qId].wrongChoices.includes(chosenOriginalIndex)) {
+      state.questions[qId].wrongChoices.push(chosenOriginalIndex);
+    }
+  }
+  state.questions[qId].lastAt = new Date().toISOString();
+  saveUserState(state);
+
   updateStatsDisplay();
 
   feedbackEl.classList.remove("correct", "wrong");

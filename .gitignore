@@ -5,4 +5,7 @@ __pycache__/
 *.pyd
 
 # Local config / credentials helpers
-set.ps1
+.key/
+dev/
+.firebase/
+
